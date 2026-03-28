@@ -1,6 +1,8 @@
 import { fetchEvents } from '@/lib/api';
 import { NextResponse } from 'next/server';
 
+export const revalidate = 86400; // Cache the entire API route for 24 hours (ISR)
+
 export async function GET() {
   try {
     const events = await fetchEvents();
