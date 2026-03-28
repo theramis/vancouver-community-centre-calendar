@@ -17,8 +17,9 @@ A web application hosted on Vercel that fetches Vancouver community centre event
 
 ## 4. User Interface & Experience (UI/UX)
 - **Hierarchy & Layout:** Events are grouped hierarchically: **Location → Title**. The interface relies on collapsible accordions to prevent visual clutter and manage the massive list of events.
+- **Series Details:** Series titles display their respective day of the week and active time duration (based on the first instance) to provide quick schedule context at a glance.
 - **Search & Filtering:** To improve navigation, the page includes a Location filter dropdown and a text search bar, allowing users to quickly locate their desired class.
-- **Selection Scope:** Users select an entire "Series" (e.g., all instances of "Yoga at Location A") rather than individual event dates. Because they subscribe to the series, any future instances added to that series by the community centre will automatically sync to their calendar.
+- **Selection & Management:** Users select an entire "Series" (e.g., all instances of "Yoga at Location A") rather than individual event dates. Because they subscribe to the series, any future instances added to that series by the community centre will automatically sync to their calendar. The sticky action bar includes an explicit "Deselect All" capability to allow users to quickly reset their selections.
 - **Error Handling:** If the client-side fetch fails due to network issues on page load, the application will automatically attempt to retry the fetch before presenting a fallback error state.
 
 ## 5. Calendar Generation (.ics) & Integration
