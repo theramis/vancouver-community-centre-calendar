@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ChevronDown, ChevronRight, Search, Calendar as CalendarIcon, Info, CheckSquare, Square, Download, Copy, ExternalLink, AlertTriangle } from 'lucide-react';
 import { Series } from '@/lib/api';
 import { compressIds } from '@/lib/utils';
@@ -11,11 +11,38 @@ export default function CalendarApp() {
   const [error, setError] = useState<string | null>(null);
   
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedLocation, setSelectedLocation] = useState('All');
+  const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
+  const [isLocationDropdownOpen, setIsLocationDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [expandedLocations, setExpandedLocations] = useState<Set<string>>(new Set());
   const [expandedSeries, setExpandedSeries] = useState<Set<number>>(new Set());
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('selectedLocations');
+      if (stored) {
+        setSelectedLocations(JSON.parse(stored));
+      }
+    } catch (e) {
+      console.error('Failed to load selected locations', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('selectedLocations', JSON.stringify(selectedLocations));
+  }, [selectedLocations]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsLocationDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     let retries = 3;
@@ -48,17 +75,17 @@ export default function CalendarApp() {
 
   const locations = useMemo(() => {
     const locs = new Set(events.map(e => e.location));
-    return ['All', ...Array.from(locs).sort()];
+    return Array.from(locs).sort();
   }, [events]);
 
   const filteredEvents = useMemo(() => {
     return events.filter(series => {
-      const matchLocation = selectedLocation === 'All' || series.location === selectedLocation;
+      const matchLocation = selectedLocations.length === 0 || selectedLocations.includes(series.location);
       const matchSearch = series.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           series.location.toLowerCase().includes(searchQuery.toLowerCase());
       return matchLocation && matchSearch;
     });
-  }, [events, selectedLocation, searchQuery]);
+  }, [events, selectedLocations, searchQuery]);
 
   const groupedEvents = useMemo(() => {
     const groups = new Map<string, Series[]>();
@@ -205,17 +232,54 @@ export default function CalendarApp() {
               className="w-full pl-12 pr-4 py-3 bg-white border border-[#e0e0e0] rounded-full focus:outline-none focus:border-[#1a73e8] focus:ring-1 focus:ring-[#1a73e8] text-[#202124] placeholder-[#5f6368] transition-shadow"
             />
           </div>
-          <div className="w-full md:w-72 relative">
-            <select
-              value={selectedLocation}
-              onChange={(e) => setSelectedLocation(e.target.value)}
-              className="w-full pl-5 pr-10 py-3 bg-white border border-[#e0e0e0] rounded-full focus:outline-none focus:border-[#1a73e8] focus:ring-1 focus:ring-[#1a73e8] appearance-none text-[#202124] transition-shadow cursor-pointer"
+          <div className="w-full md:w-72 relative" ref={dropdownRef}>
+            <button
+              onClick={() => setIsLocationDropdownOpen(!isLocationDropdownOpen)}
+              className="w-full pl-5 pr-10 py-3 bg-white border border-[#e0e0e0] rounded-full focus:outline-none focus:border-[#1a73e8] focus:ring-1 focus:ring-[#1a73e8] text-left text-[#202124] transition-shadow cursor-pointer truncate"
             >
-              {locations.map(loc => (
-                <option key={loc} value={loc}>{loc}</option>
-              ))}
-            </select>
-            <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-[#5f6368] pointer-events-none" size={20} />
+              {selectedLocations.length === 0 
+                ? 'All Locations' 
+                : selectedLocations.length === 1 
+                  ? selectedLocations[0] 
+                  : `${selectedLocations.length} Locations Selected`}
+            </button>
+            <ChevronDown className={`absolute right-4 top-1/2 -translate-y-1/2 text-[#5f6368] pointer-events-none transition-transform ${isLocationDropdownOpen ? 'rotate-180' : ''}`} size={20} />
+            
+            {isLocationDropdownOpen && (
+              <div className="absolute top-full mt-2 w-full bg-white border border-[#e0e0e0] rounded-2xl shadow-lg z-30 max-h-80 overflow-y-auto py-2 custom-scrollbar">
+                <button
+                  className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-[#f8f9fa] transition-colors text-left"
+                  onClick={() => setSelectedLocations([])}
+                >
+                  <div className={`shrink-0 ${selectedLocations.length === 0 ? 'text-[#1a73e8]' : 'text-[#5f6368]'}`}>
+                    {selectedLocations.length === 0 ? <CheckSquare size={20} /> : <Square size={20} />}
+                  </div>
+                  <span className={`font-medium ${selectedLocations.length === 0 ? 'text-[#1a73e8]' : 'text-[#202124]'}`}>All Locations</span>
+                </button>
+                <div className="h-px bg-[#e0e0e0] my-1"></div>
+                {locations.map(loc => {
+                  const isSelected = selectedLocations.includes(loc);
+                  return (
+                    <button
+                      key={loc}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-[#f8f9fa] transition-colors text-left"
+                      onClick={() => {
+                        setSelectedLocations(prev => 
+                          prev.includes(loc) 
+                            ? prev.filter(l => l !== loc)
+                            : [...prev, loc]
+                        );
+                      }}
+                    >
+                      <div className={`shrink-0 ${isSelected ? 'text-[#1a73e8]' : 'text-[#5f6368]'}`}>
+                        {isSelected ? <CheckSquare size={20} /> : <Square size={20} />}
+                      </div>
+                      <span className={`truncate ${isSelected ? 'text-[#1a73e8] font-medium' : 'text-[#202124]'}`}>{loc}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 
