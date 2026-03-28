@@ -6,7 +6,7 @@ A web application hosted on Vercel that fetches Vancouver community centre event
 ## 2. Architecture & Data Flow
 - **Hosting:** Vercel (Hobby Tier).
 - **Framework:** Next.js (App Router).
-- **Data Fetching Strategy:** Data is fetched from the external community centre API utilizing the logic from `fetch_script.js`.
+- **Data Fetching Strategy:** Data is fetched from the external community centre API utilizing the logic from `fetch_script.js`. It queries across all available community centre IDs (20+ locations) in a single request.
 - **Caching & ISR:** The application leverages Next.js App Router's native `fetch` cache and Incremental Static Regeneration (ISR). The upstream data fetch to the community centre API is cached with a revalidation interval of **24 Hours** (`next: { revalidate: 86400 }`). This ensures fast page loads and `.ics` generation without exceeding API rate limits.
 - **Storage:** No persistent database or external storage is used. Everything is generated dynamically based on the cached API data and URL query parameters.
 

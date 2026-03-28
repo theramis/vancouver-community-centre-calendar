@@ -29,6 +29,11 @@ export type Series = {
 
 export async function fetchEvents(): Promise<Series[]> {
   try {
+    // We statically know the list of potential center IDs from the user's provided fetch script.
+    // To ensure we don't accidentally miss any or cause malformed URLs if we don't know the exact IDs, 
+    // we use the exact array provided.
+    const allCenterIds = [38,57,6,29,48,50,43,44,39,55,33,35,40,54,53,46,42,41,58,32,7,49];
+
     const response = await fetch("https://anc.ca.apm.activecommunities.com/vancouver/rest/onlinecalendar/multicenter/events?locale=en-US", {
       headers: {
         "accept": "*/*",
@@ -37,7 +42,20 @@ export async function fetchEvents(): Promise<Series[]> {
         "page_info": "{\"page_number\":1,\"total_records_per_page\":1000}", // Increase max to try to get everything
         "x-requested-with": "XMLHttpRequest"
       },
-      body: "{\"calendar_id\":15,\"center_ids\":[6],\"display_all\":0,\"search_start_time\":\"\",\"search_end_time\":\"\",\"facility_ids\":[],\"activity_category_ids\":[],\"activity_sub_category_ids\":[],\"activity_ids\":[],\"activity_min_age\":null,\"activity_max_age\":null,\"event_type_ids\":[]}",
+      body: JSON.stringify({
+        calendar_id: 15,
+        center_ids: allCenterIds,
+        display_all: 0,
+        search_start_time: "",
+        search_end_time: "",
+        facility_ids: [],
+        activity_category_ids: [],
+        activity_sub_category_ids: [],
+        activity_ids: [],
+        activity_min_age: null,
+        activity_max_age: null,
+        event_type_ids: []
+      }),
       method: "POST",
       next: {
         revalidate: 86400 // 24 hours ISR cache
