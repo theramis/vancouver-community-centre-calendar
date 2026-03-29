@@ -2,7 +2,7 @@ import CalendarApp from '@/components/CalendarApp';
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-gray-50/50">
+    <main className="min-h-screen">
       <CalendarApp />
     </main>
   );
