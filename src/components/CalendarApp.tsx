@@ -47,6 +47,7 @@ export default function CalendarApp() {
   const [subscriptionStatus, setSubscriptionStatus] = useState('Enter a subscription ID to load or create one.');
   const [subscriptionBusy, setSubscriptionBusy] = useState(false);
   const [urlMode, setUrlMode] = useState<UrlMode>('encoded');
+  const [copyStatus, setCopyStatus] = useState('');
 
   useEffect(() => {
     try {
@@ -166,6 +167,7 @@ export default function CalendarApp() {
   const isValidSubscriptionId = SUBSCRIPTION_ID_PATTERN.test(trimmedSubscriptionId);
   const hasSavedSubscription = Boolean(savedSubscriptionId);
   const hasUnsavedChanges = Boolean(savedSubscriptionId) && savedIdsKey !== currentSelectedIdsKey;
+  const selectedSeriesLabel = selectedIds.size === 1 ? 'series selected' : 'series selected';
 
   const toggleLocation = (location: string) => {
     const newExpanded = new Set(expandedLocations);
@@ -336,7 +338,8 @@ export default function CalendarApp() {
     const url = generateIcsUrl();
     if (url) {
       await navigator.clipboard.writeText(url);
-      alert('Subscription link copied to clipboard!');
+      setCopyStatus('Link copied');
+      window.setTimeout(() => setCopyStatus(''), 1800);
     }
   };
 
@@ -369,12 +372,12 @@ export default function CalendarApp() {
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans pb-12">
       {/* Top App Bar area */}
-      <header className="bg-zinc-900 border-b border-zinc-800 pt-8 pb-6 px-4 md:px-8 mb-6">
+      <header className="bg-[radial-gradient(circle_at_top_left,rgba(37,99,235,0.22),transparent_34%),linear-gradient(180deg,#18181b_0%,#09090b_100%)] border-b border-zinc-800 pt-8 pb-7 px-4 md:px-8 mb-6">
         <div className="max-w-5xl mx-auto">
-          <h1 className="text-3xl md:text-4xl font-normal text-zinc-100 mb-2 tracking-tight">
+          <h1 className="text-3xl md:text-4xl font-semibold text-zinc-100 mb-2 tracking-tight">
             Vancouver Community Centre Calendar
           </h1>
-          <p className="text-zinc-400 text-base md:text-lg">
+          <p className="text-zinc-400 text-base md:text-lg max-w-3xl">
             Select the event series you want to subscribe to and generate a custom Google Calendar link.
           </p>
         </div>
@@ -382,8 +385,19 @@ export default function CalendarApp() {
 
       <div className="max-w-5xl mx-auto px-4 md:px-8">
         {/* Subscription Controls */}
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 md:p-5 mb-6">
-          <div className="flex flex-col lg:flex-row gap-3 lg:items-end">
+        <div className="bg-zinc-900/90 border border-zinc-800 rounded-3xl p-4 md:p-5 mb-6 shadow-2xl shadow-black/20">
+          <div className="flex items-start justify-between gap-4 mb-4">
+            <div>
+              <h2 className="text-lg font-medium text-zinc-100 tracking-tight">Subscription</h2>
+              <p className="text-sm text-zinc-400 mt-1">Use a saved ID for a stable calendar URL, or copy an encoded one-off link.</p>
+            </div>
+            {hasSavedSubscription && (
+              <div className="hidden sm:block rounded-full border border-blue-800/60 bg-blue-950/40 px-3 py-1 text-xs font-medium text-blue-300">
+                Active
+              </div>
+            )}
+          </div>
+          <div className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-end">
             <div className="flex-1">
               <label htmlFor="subscription-id" className="block text-sm font-medium text-zinc-300 mb-2">
                 Subscription ID
@@ -394,28 +408,28 @@ export default function CalendarApp() {
                 value={subscriptionId}
                 onChange={(e) => setSubscriptionId(e.target.value)}
                 placeholder="Choose or generate a secret subscription ID"
-                className="w-full px-4 py-3 bg-zinc-950 border border-zinc-800 rounded-full focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-zinc-100 placeholder-zinc-500"
+                className="w-full px-4 py-3 bg-zinc-950 border border-zinc-800 rounded-2xl focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-zinc-100 placeholder-zinc-500"
               />
             </div>
-            <div className="flex flex-col sm:flex-row gap-3">
+            <div className="grid grid-cols-2 gap-3 sm:flex sm:flex-row">
               <button
                 onClick={() => loadSubscription()}
                 disabled={subscriptionBusy || !trimmedSubscriptionId}
-                className="px-5 py-3 bg-zinc-800 text-zinc-100 font-medium rounded-full hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="px-5 py-3 bg-zinc-800 text-zinc-100 font-medium rounded-2xl hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 Load/Create
               </button>
               <button
                 onClick={generateSubscriptionId}
                 disabled={subscriptionBusy}
-                className="px-5 py-3 bg-zinc-800 text-zinc-100 font-medium rounded-full hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="px-5 py-3 bg-zinc-800 text-zinc-100 font-medium rounded-2xl hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 Generate ID
               </button>
               <button
                 onClick={saveSubscription}
                 disabled={subscriptionBusy || !isValidSubscriptionId}
-                className="px-5 py-3 bg-blue-600 text-white font-medium rounded-full hover:bg-blue-700 disabled:opacity-50 disabled:bg-zinc-800 disabled:text-zinc-500 disabled:cursor-not-allowed transition-colors"
+                className="px-5 py-3 bg-blue-600 text-white font-medium rounded-2xl hover:bg-blue-700 disabled:opacity-50 disabled:bg-zinc-800 disabled:text-zinc-500 disabled:cursor-not-allowed transition-colors"
               >
                 Save Subscription
               </button>
@@ -423,39 +437,49 @@ export default function CalendarApp() {
                 <button
                   onClick={deleteCurrentSubscription}
                   disabled={subscriptionBusy}
-                  className="px-5 py-3 bg-red-950/60 border border-red-900 text-red-300 font-medium rounded-full hover:bg-red-950 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="px-5 py-3 bg-red-950/60 border border-red-900 text-red-300 font-medium rounded-2xl hover:bg-red-950 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   Delete
                 </button>
               )}
             </div>
           </div>
-          <div className="mt-3 text-sm text-zinc-400">
+          <div className={`mt-4 rounded-2xl border px-4 py-3 text-sm ${hasUnsavedChanges ? 'border-amber-800/60 bg-amber-950/30 text-amber-200' : 'border-zinc-800 bg-zinc-950/60 text-zinc-400'}`}>
             {hasUnsavedChanges ? 'Unsaved changes. Click Save Subscription to update the calendar link.' : subscriptionStatus}
           </div>
         </div>
 
         {/* Sticky Action Bar */}
         <div className="sticky top-0 z-20 bg-zinc-950/95 backdrop-blur-sm pb-4 mb-6 pt-2 -mx-4 px-4 md:mx-0 md:px-0">
-          <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-zinc-900 border border-zinc-800 rounded-2xl p-4 shadow-sm">
-            <div className="flex items-center gap-4">
-              <div className="text-base font-medium text-blue-400 bg-blue-900/30 px-4 py-1.5 rounded-full">
-                {selectedIds.size} {selectedIds.size === 1 ? 'Series' : 'Series'} Selected
+          <div className="grid gap-4 bg-zinc-900/95 border border-zinc-800 rounded-3xl p-4 shadow-2xl shadow-black/20 md:grid-cols-[1fr_auto] md:items-center">
+            <div className="flex items-center justify-between gap-4 md:justify-start">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-950/60 text-xl font-semibold text-blue-200 ring-1 ring-blue-800/50">
+                  {selectedIds.size}
+                </div>
+                <div>
+                  <div className="text-sm font-medium text-zinc-100">{selectedSeriesLabel}</div>
+                  <div className="text-xs text-zinc-500">
+                    {urlMode === 'subscription' ? 'Using saved subscription link' : 'Using encoded selected IDs'}
+                  </div>
+                </div>
               </div>
               {selectedIds.size > 0 && (
                 <button
                   onClick={() => setSelectedIds(new Set())}
-                  className="text-sm font-medium text-zinc-400 hover:text-zinc-100 transition-colors px-2 py-1 rounded-md hover:bg-zinc-800"
+                  className="text-sm font-medium text-zinc-400 hover:text-zinc-100 transition-colors px-3 py-2 rounded-xl hover:bg-zinc-800"
                 >
-                  Clear selection
+                  Clear
                 </button>
               )}
             </div>
-            <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+            <div className="grid gap-3 sm:grid-cols-[minmax(180px,auto)_1fr_1fr] md:w-auto">
+                <label className="sr-only" htmlFor="url-mode">Calendar URL format</label>
                 <select
+                  id="url-mode"
                   value={urlMode}
                   onChange={(e) => setUrlMode(e.target.value as UrlMode)}
-                  className="px-4 py-2.5 bg-zinc-950 border border-zinc-700 text-zinc-100 rounded-full focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  className="w-full px-4 py-3 bg-zinc-950 border border-zinc-700 text-zinc-100 rounded-2xl focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                 >
                   <option value="subscription">Subscription URL</option>
                   <option value="encoded">Encoded Event IDs</option>
@@ -463,18 +487,18 @@ export default function CalendarApp() {
                 <button
                   onClick={handleCopyLink}
                   disabled={!icsUrl}
-                  className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-2.5 bg-blue-600 text-white font-medium rounded-full hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:bg-zinc-800 disabled:text-zinc-500 disabled:cursor-not-allowed transition-colors"
+                  className="flex items-center justify-center gap-2 px-5 py-3 bg-blue-600 text-white font-medium rounded-2xl hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:bg-zinc-800 disabled:text-zinc-500 disabled:cursor-not-allowed transition-colors"
                 >
                   <Copy size={18} />
-                  Copy Subscribe Link
+                  {copyStatus || 'Copy Link'}
                 </button>
                 <a
                   href={icsUrl || '#'}
                   download
-                  className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-2.5 bg-zinc-900 border border-zinc-700 text-blue-400 font-medium rounded-full hover:bg-zinc-800 hover:border-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors ${!icsUrl ? 'opacity-50 border-zinc-800 text-zinc-600 cursor-not-allowed pointer-events-none' : ''}`}
+                  className={`flex items-center justify-center gap-2 px-5 py-3 bg-zinc-950 border border-zinc-700 text-blue-300 font-medium rounded-2xl hover:bg-zinc-800 hover:border-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${!icsUrl ? 'opacity-50 border-zinc-800 text-zinc-600 cursor-not-allowed pointer-events-none' : ''}`}
                 >
                   <Download size={18} />
-                  Download .ics
+                  Download
                 </a>
             </div>
           </div>
