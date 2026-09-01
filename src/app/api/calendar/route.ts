@@ -1,4 +1,5 @@
 import { fetchEvents } from '@/lib/api';
+import { getSubscription, isValidSubscriptionId } from '@/lib/subscriptions';
 import * as ics from 'ics';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -32,19 +33,33 @@ function parseDate(dateStr: string): ics.DateArray {
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
+  const subscriptionParam = searchParams.get('subscription');
   const idsParam = searchParams.get('ids');
 
-  if (!idsParam) {
-    return new NextResponse('Missing ids parameter', { status: 400 });
-  }
-
-  const selectedIds = new Set(decompressIds(idsParam));
-  
-  if (selectedIds.size === 0) {
-    return new NextResponse('Invalid ids parameter', { status: 400 });
-  }
-
   try {
+    let selectedIds: Set<number>;
+
+    if (subscriptionParam) {
+      if (!isValidSubscriptionId(subscriptionParam)) {
+        return new NextResponse('Invalid subscription parameter', { status: 400 });
+      }
+
+      const subscription = await getSubscription(subscriptionParam);
+      if (!subscription) {
+        return new NextResponse('Subscription not found', { status: 404 });
+      }
+
+      selectedIds = new Set(subscription.ids);
+    } else if (idsParam) {
+      selectedIds = new Set(decompressIds(idsParam));
+    } else {
+      return new NextResponse('Missing subscription or ids parameter', { status: 400 });
+    }
+
+    if (selectedIds.size === 0) {
+      return new NextResponse('No selected events found', { status: 404 });
+    }
+
     const allSeries = await fetchEvents();
     
     const events: ics.EventAttributes[] = [];

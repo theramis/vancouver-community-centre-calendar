@@ -5,6 +5,28 @@ import { ChevronDown, ChevronRight, Search, Calendar as CalendarIcon, Info, Chec
 import { Series } from '@/lib/api';
 import { compressIds } from '@/lib/utils';
 
+type UrlMode = 'subscription' | 'encoded';
+
+const SUBSCRIPTION_ID_PATTERN = /^[a-zA-Z0-9_-]{3,80}$/;
+const ID_ADJECTIVES = ['cedar', 'rain', 'trout', 'fraser', 'seawall', 'maple', 'harbour', 'raven'];
+const ID_NOUNS = ['swim', 'yoga', 'dance', 'skate', 'fitness', 'pilates', 'tennis', 'soccer'];
+
+function selectedIdsKey(ids: Set<number>) {
+  return Array.from(ids).sort((a, b) => a - b).join(',');
+}
+
+function generateReadableId() {
+  const randomValues = new Uint32Array(3);
+  crypto.getRandomValues(randomValues);
+
+  const adjective = ID_ADJECTIVES[randomValues[0] % ID_ADJECTIVES.length];
+  const noun = ID_NOUNS[randomValues[1] % ID_NOUNS.length];
+  const number = String(randomValues[2] % 10000).padStart(4, '0');
+  const suffix = randomValues[1].toString(36).slice(-4);
+
+  return `${adjective}-${noun}-${number}-${suffix}`;
+}
+
 export default function CalendarApp() {
   const [events, setEvents] = useState<Series[]>([]);
   const [loading, setLoading] = useState(true);
@@ -18,6 +40,13 @@ export default function CalendarApp() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [expandedLocations, setExpandedLocations] = useState<Set<string>>(new Set());
   const [expandedSeries, setExpandedSeries] = useState<Set<number>>(new Set());
+
+  const [subscriptionId, setSubscriptionId] = useState('');
+  const [savedSubscriptionId, setSavedSubscriptionId] = useState<string | null>(null);
+  const [savedIdsKey, setSavedIdsKey] = useState('');
+  const [subscriptionStatus, setSubscriptionStatus] = useState('Enter a subscription ID to load or create one.');
+  const [subscriptionBusy, setSubscriptionBusy] = useState(false);
+  const [urlMode, setUrlMode] = useState<UrlMode>('encoded');
 
   useEffect(() => {
     try {
@@ -33,6 +62,42 @@ export default function CalendarApp() {
   useEffect(() => {
     localStorage.setItem('selectedLocations', JSON.stringify(selectedLocations));
   }, [selectedLocations]);
+
+  useEffect(() => {
+    const storedSubscriptionId = localStorage.getItem('subscriptionId');
+    if (!storedSubscriptionId) return;
+
+    setSubscriptionId(storedSubscriptionId);
+
+    const loadStoredSubscription = async () => {
+      try {
+        const res = await fetch(`/api/subscriptions/${encodeURIComponent(storedSubscriptionId)}`);
+
+        if (res.status === 404) {
+          setSavedSubscriptionId(null);
+          setSavedIdsKey('');
+          setUrlMode('encoded');
+          setSubscriptionStatus('Saved subscription was not found. Save to create it again.');
+          return;
+        }
+
+        if (!res.ok) throw new Error('Failed to load subscription');
+
+        const data: { ids: number[] } = await res.json();
+        const loadedIds = new Set(data.ids);
+        setSelectedIds(loadedIds);
+        setSavedSubscriptionId(storedSubscriptionId);
+        setSavedIdsKey(selectedIdsKey(loadedIds));
+        setUrlMode('subscription');
+        setSubscriptionStatus('Loaded saved subscription.');
+      } catch (e) {
+        console.error('Failed to load saved subscription', e);
+        setSubscriptionStatus('Could not load saved subscription.');
+      }
+    };
+
+    loadStoredSubscription();
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -59,7 +124,7 @@ export default function CalendarApp() {
           setExpandedLocations(new Set([data[0].location]));
         }
         setLoading(false);
-      } catch (err) {
+      } catch {
         if (retries > 0) {
           retries--;
           setTimeout(fetchEventsWithRetry, 1000);
@@ -96,6 +161,12 @@ export default function CalendarApp() {
     return groups;
   }, [filteredEvents]);
 
+  const currentSelectedIdsKey = useMemo(() => selectedIdsKey(selectedIds), [selectedIds]);
+  const trimmedSubscriptionId = subscriptionId.trim();
+  const isValidSubscriptionId = SUBSCRIPTION_ID_PATTERN.test(trimmedSubscriptionId);
+  const hasSavedSubscription = Boolean(savedSubscriptionId);
+  const hasUnsavedChanges = Boolean(savedSubscriptionId) && savedIdsKey !== currentSelectedIdsKey;
+
   const toggleLocation = (location: string) => {
     const newExpanded = new Set(expandedLocations);
     if (newExpanded.has(location)) newExpanded.delete(location);
@@ -118,7 +189,143 @@ export default function CalendarApp() {
     setSelectedIds(newSelected);
   };
 
+  const loadSubscription = async (id = trimmedSubscriptionId) => {
+    if (!SUBSCRIPTION_ID_PATTERN.test(id)) {
+      setSubscriptionStatus('Use 3-80 letters, numbers, dashes, or underscores.');
+      return false;
+    }
+
+    setSubscriptionBusy(true);
+    try {
+      const res = await fetch(`/api/subscriptions/${encodeURIComponent(id)}`);
+
+      if (res.status === 404) {
+        setSubscriptionId(id);
+        setSavedSubscriptionId(null);
+        setSavedIdsKey('');
+        setUrlMode('encoded');
+        localStorage.setItem('subscriptionId', id);
+        setSubscriptionStatus('New subscription ID. Select events and save to create it.');
+        return true;
+      }
+
+      if (!res.ok) throw new Error('Failed to load subscription');
+
+      const data: { ids: number[] } = await res.json();
+      const loadedIds = new Set(data.ids);
+      setSubscriptionId(id);
+      setSelectedIds(loadedIds);
+      setSavedSubscriptionId(id);
+      setSavedIdsKey(selectedIdsKey(loadedIds));
+      setUrlMode('subscription');
+      localStorage.setItem('subscriptionId', id);
+      setSubscriptionStatus('Loaded saved subscription.');
+      return true;
+    } catch (e) {
+      console.error('Failed to load subscription', e);
+      setSubscriptionStatus('Failed to load subscription.');
+      return false;
+    } finally {
+      setSubscriptionBusy(false);
+    }
+  };
+
+  const saveSubscription = async () => {
+    if (!isValidSubscriptionId) {
+      setSubscriptionStatus('Use 3-80 letters, numbers, dashes, or underscores.');
+      return;
+    }
+
+    setSubscriptionBusy(true);
+    setSubscriptionStatus('Saving subscription...');
+    try {
+      const res = await fetch(`/api/subscriptions/${encodeURIComponent(trimmedSubscriptionId)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selectedIds) }),
+      });
+
+      if (!res.ok) throw new Error('Failed to save subscription');
+
+      setSavedSubscriptionId(trimmedSubscriptionId);
+      setSavedIdsKey(currentSelectedIdsKey);
+      setUrlMode('subscription');
+      localStorage.setItem('subscriptionId', trimmedSubscriptionId);
+      setSubscriptionStatus('Saved subscription.');
+    } catch (e) {
+      console.error('Failed to save subscription', e);
+      setSubscriptionStatus('Failed to save subscription.');
+    } finally {
+      setSubscriptionBusy(false);
+    }
+  };
+
+  const deleteCurrentSubscription = async () => {
+    if (!savedSubscriptionId) return;
+
+    setSubscriptionBusy(true);
+    try {
+      const res = await fetch(`/api/subscriptions/${encodeURIComponent(savedSubscriptionId)}`, {
+        method: 'DELETE',
+      });
+
+      if (!res.ok) throw new Error('Failed to delete subscription');
+
+      setSavedSubscriptionId(null);
+      setSavedIdsKey('');
+      setUrlMode('encoded');
+      localStorage.removeItem('subscriptionId');
+      setSubscriptionStatus('Deleted subscription.');
+    } catch (e) {
+      console.error('Failed to delete subscription', e);
+      setSubscriptionStatus('Failed to delete subscription.');
+    } finally {
+      setSubscriptionBusy(false);
+    }
+  };
+
+  const generateSubscriptionId = async () => {
+    setSubscriptionBusy(true);
+    try {
+      for (let i = 0; i < 5; i++) {
+        const id = generateReadableId();
+        const res = await fetch(`/api/subscriptions/${encodeURIComponent(id)}`);
+        if (res.status === 404) {
+          setSubscriptionId(id);
+          setSavedSubscriptionId(null);
+          setSavedIdsKey('');
+          setUrlMode('encoded');
+          setSubscriptionStatus('Generated a new subscription ID. Save to create it.');
+          return;
+        }
+      }
+
+      const fallbackId = generateReadableId();
+      setSubscriptionId(fallbackId);
+      setSavedSubscriptionId(null);
+      setSavedIdsKey('');
+      setUrlMode('encoded');
+      setSubscriptionStatus('Generated a new subscription ID. Save to create it.');
+    } catch (e) {
+      console.error('Failed to check generated subscription ID', e);
+      const fallbackId = generateReadableId();
+      setSubscriptionId(fallbackId);
+      setSavedSubscriptionId(null);
+      setSavedIdsKey('');
+      setUrlMode('encoded');
+      setSubscriptionStatus('Generated a new subscription ID. Save to create it.');
+    } finally {
+      setSubscriptionBusy(false);
+    }
+  };
+
   const generateIcsUrl = () => {
+    if (urlMode === 'subscription') {
+      if (!savedSubscriptionId) return null;
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      return `${origin}/api/calendar?subscription=${encodeURIComponent(savedSubscriptionId)}`;
+    }
+
     const compressed = compressIds(Array.from(selectedIds));
     if (!compressed) return null;
     const origin = typeof window !== 'undefined' ? window.location.origin : '';
@@ -174,6 +381,60 @@ export default function CalendarApp() {
       </header>
 
       <div className="max-w-5xl mx-auto px-4 md:px-8">
+        {/* Subscription Controls */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 md:p-5 mb-6">
+          <div className="flex flex-col lg:flex-row gap-3 lg:items-end">
+            <div className="flex-1">
+              <label htmlFor="subscription-id" className="block text-sm font-medium text-zinc-300 mb-2">
+                Subscription ID
+              </label>
+              <input
+                id="subscription-id"
+                type="text"
+                value={subscriptionId}
+                onChange={(e) => setSubscriptionId(e.target.value)}
+                placeholder="Choose or generate a secret subscription ID"
+                className="w-full px-4 py-3 bg-zinc-950 border border-zinc-800 rounded-full focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-zinc-100 placeholder-zinc-500"
+              />
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                onClick={() => loadSubscription()}
+                disabled={subscriptionBusy || !trimmedSubscriptionId}
+                className="px-5 py-3 bg-zinc-800 text-zinc-100 font-medium rounded-full hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Load/Create
+              </button>
+              <button
+                onClick={generateSubscriptionId}
+                disabled={subscriptionBusy}
+                className="px-5 py-3 bg-zinc-800 text-zinc-100 font-medium rounded-full hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Generate ID
+              </button>
+              <button
+                onClick={saveSubscription}
+                disabled={subscriptionBusy || !isValidSubscriptionId}
+                className="px-5 py-3 bg-blue-600 text-white font-medium rounded-full hover:bg-blue-700 disabled:opacity-50 disabled:bg-zinc-800 disabled:text-zinc-500 disabled:cursor-not-allowed transition-colors"
+              >
+                Save Subscription
+              </button>
+              {hasSavedSubscription && (
+                <button
+                  onClick={deleteCurrentSubscription}
+                  disabled={subscriptionBusy}
+                  className="px-5 py-3 bg-red-950/60 border border-red-900 text-red-300 font-medium rounded-full hover:bg-red-950 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Delete
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="mt-3 text-sm text-zinc-400">
+            {hasUnsavedChanges ? 'Unsaved changes. Click Save Subscription to update the calendar link.' : subscriptionStatus}
+          </div>
+        </div>
+
         {/* Sticky Action Bar */}
         <div className="sticky top-0 z-20 bg-zinc-950/95 backdrop-blur-sm pb-4 mb-6 pt-2 -mx-4 px-4 md:mx-0 md:px-0">
           <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-zinc-900 border border-zinc-800 rounded-2xl p-4 shadow-sm">
@@ -190,10 +451,18 @@ export default function CalendarApp() {
                 </button>
               )}
             </div>
-            <div className="flex gap-3 w-full md:w-auto">
+            <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+                <select
+                  value={urlMode}
+                  onChange={(e) => setUrlMode(e.target.value as UrlMode)}
+                  className="px-4 py-2.5 bg-zinc-950 border border-zinc-700 text-zinc-100 rounded-full focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="subscription">Subscription URL</option>
+                  <option value="encoded">Encoded Event IDs</option>
+                </select>
                 <button
                   onClick={handleCopyLink}
-                  disabled={selectedIds.size === 0}
+                  disabled={!icsUrl}
                   className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-2.5 bg-blue-600 text-white font-medium rounded-full hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:bg-zinc-800 disabled:text-zinc-500 disabled:cursor-not-allowed transition-colors"
                 >
                   <Copy size={18} />
@@ -202,7 +471,7 @@ export default function CalendarApp() {
                 <a
                   href={icsUrl || '#'}
                   download
-                  className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-2.5 bg-zinc-900 border border-zinc-700 text-blue-400 font-medium rounded-full hover:bg-zinc-800 hover:border-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors ${selectedIds.size === 0 ? 'opacity-50 border-zinc-800 text-zinc-600 cursor-not-allowed pointer-events-none' : ''}`}
+                  className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-2.5 bg-zinc-900 border border-zinc-700 text-blue-400 font-medium rounded-full hover:bg-zinc-800 hover:border-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors ${!icsUrl ? 'opacity-50 border-zinc-800 text-zinc-600 cursor-not-allowed pointer-events-none' : ''}`}
                 >
                   <Download size={18} />
                   Download .ics
